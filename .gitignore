@@ -1,4 +1,3 @@
 /target
 .env
-.github/workflows
-rust.yml
+./.github/workflows
