@@ -1,3 +1,5 @@
 /target
 .env
-*.lock
+Cargo.lock
+Procfile
+rust-toolchain
