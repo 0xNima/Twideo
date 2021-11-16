@@ -5,8 +5,8 @@ mod helpers;
 use teloxide::prelude::*;
 use dotenv::dotenv;
 use std::env;
-use teloxide::types::InputFile;
-use helpers::{get_video_url, twitt_id};
+use teloxide::types::{InputFile, InputMedia, InputMediaVideo};
+use helpers::{get_video_url, twitt_id, get_tweet_data};
 
 #[tokio::main]
 async fn main() {
@@ -20,9 +20,13 @@ async fn main() {
         if let Some(link) = message.update.text() {
             if let Some(id) = twitt_id(link) {
                 let video_url = get_video_url(id).await.unwrap_or(None);
+                let caption = get_tweet_data(id).await.unwrap_or(String::from(""));
                 if let Some(url) = video_url {
-                    let _bot = message.requester;
-                    _bot.send_video(message.update.chat.id, InputFile::url(url)).await?;
+                    let media = InputMediaVideo::new(InputFile::url(url));
+                    let media_group = vec!{
+                        InputMedia::Video(media.caption(caption))
+                    };
+                    message.answer_media_group(media_group).await?;
                 }
             }
         }    

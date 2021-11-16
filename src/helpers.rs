@@ -4,6 +4,7 @@ use std::env;
 
 lazy_static::lazy_static! {
     pub static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
+    pub static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?ids=";
 }
 
 pub fn twitt_id(link: &str) -> Option<i64>{
@@ -47,6 +48,32 @@ struct Body {
     extended_entities: ExtendenEntities
 }
 
+
+#[derive(Deserialize, Debug)]
+struct V2Data {
+    author_id: String,
+    id: String,
+    text: String
+}
+
+#[derive(Deserialize, Debug)]
+struct User {
+    id: String,
+    name: String,
+    username: String
+}
+
+#[derive(Deserialize, Debug)]
+struct Includes {
+    users: Vec<User>
+}
+
+#[derive(Deserialize, Debug)]
+struct V2Body {
+    data: Vec<V2Data>,
+    includes: Includes
+}
+
 pub async fn get_video_url(tid: i64) -> Result<Option<String>, Box<dyn std::error::Error>> {
     log::info!("Send request to twitter");
     let client = reqwest::Client::new();
@@ -78,4 +105,22 @@ pub async fn get_video_url(tid: i64) -> Result<Option<String>, Box<dyn std::erro
         }
     }
     Ok(None)
+}
+
+
+pub async fn get_tweet_data(tid: i64) -> Result<String, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let resp = client.get(format!("{}{}", *TWITTER_V2_URL, tid))
+                     .header("AUTHORIZATION", format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap()))
+                     .send()
+                     .await?;
+    let body = resp.json::<V2Body>().await?;
+    let text = &body.data[0].text;
+    let user = &body.includes.users[0];
+    let name = &user.name;
+    let username = &user.name;
+    
+    let caption = format!("{} \n\n <a href='https://twitter.com/{}'>{}</a>", text, username, name);
+    
+    Ok(caption)
 }
