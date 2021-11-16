@@ -1,1 +1,1 @@
-worker: ./target/debug/twitterVideodl
+worker: ./target/release/twitterVideodl
