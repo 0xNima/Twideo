@@ -1,1 +1,1 @@
-web: ./target/debug/twitterVideodl
+worker: ./target/debug/twitterVideodl
