@@ -1,17 +1,20 @@
 extern crate lazy_static;
 use serde::Deserialize;
 use std::env;
+use regex::Regex;
 
 lazy_static::lazy_static! {
-    pub static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
-    pub static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?ids=";
+    static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
+    static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?expansions=author_id&ids=";
+    static ref RE : regex::Regex= Regex::new("https://t.co/\\w+\\b").unwrap();
 }
 
 pub fn twitt_id(link: &str) -> Option<i64>{
     let mut possible_id: i64 = 0;
     if let Some(_) = link.find("twitter.com") {
-        let vec: Vec<&str> = link.split("/").collect();
-        possible_id = vec.last().unwrap().parse().unwrap_or(0);
+        let parsed: Vec<&str> = link.split("/").collect();
+        let last_parts: Vec<&str> = parsed.last().unwrap().split("?").collect();
+        possible_id = last_parts.first().unwrap().parse().unwrap_or(0);
     }
     if possible_id > 0 {
         return Some(possible_id);
@@ -107,20 +110,23 @@ pub async fn get_video_url(tid: i64) -> Result<Option<String>, Box<dyn std::erro
     Ok(None)
 }
 
-
 pub async fn get_tweet_data(tid: i64) -> Result<String, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let resp = client.get(format!("{}{}", *TWITTER_V2_URL, tid))
                      .header("AUTHORIZATION", format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap()))
                      .send()
                      .await?;
+    log::info!("V2 Status {}", resp.status().as_u16());
+
     let body = resp.json::<V2Body>().await?;
+
     let text = &body.data[0].text;
     let user = &body.includes.users[0];
     let name = &user.name;
-    let username = &user.name;
+    let username = &user.username;
     
-    let caption = format!("{} \n\n <a href='https://twitter.com/{}'>{}</a>", text, username, name);
+    let clean_text = RE.replace_all(text, "");
+    let caption = format!("{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", clean_text, username, name);
     
     Ok(caption)
 }
