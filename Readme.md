@@ -9,10 +9,12 @@
 # Unix-like
 $ export TELOXIDE_TOKEN=<Your token here>
 $ export TWITTER_BEARER_TOKEN=<Your bearer token here>
+$ export DATABASE_URL=<Your database url>
 
 # Windows
 $ set TELOXIDE_TOKEN=<Your token here>
 $ set TWITTER_BEARER_TOKEN=<Your bearer token here>
+$ set DATABASE_URL=<Your database url>
 
 Of course you can create a `.env` file and set your environmental variables there.
 ```
