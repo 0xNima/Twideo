@@ -1,7 +1,9 @@
 extern crate lazy_static;
+
 use serde::Deserialize;
 use std::env;
 use regex::Regex;
+
 
 lazy_static::lazy_static! {
     static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
