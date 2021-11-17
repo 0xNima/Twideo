@@ -1,5 +1,4 @@
 /target
 .env
-Cargo.lock
 Procfile
 rust-toolchain
