@@ -21,7 +21,7 @@ async fn main() {
     teloxide::repl(bot, |message| async move {
         let chat = &message.update.chat;
         let username = chat.username().map(String::from);
-        let dbm = DBManager::new(&env::var("DB_URL").unwrap()).unwrap();
+        let dbm = DBManager::new(&env::var("DATABASE_URL").unwrap()).unwrap();
 
         dbm.create_user(
             chat.id, 
