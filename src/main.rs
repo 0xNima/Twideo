@@ -29,7 +29,10 @@ async fn main() {
             username
         );
         if let Some(link) = message.update.text() {
-            if let Some(id) = twitt_id(link) {
+            if link == "/start" {
+                message.answer_str("👉  Send me a valid twitter url").await?;
+            }
+            else if let Some(id) = twitt_id(link) {
                 let video_url = get_video_url(id).await.unwrap_or(None);
                 let caption = get_tweet_data(id).await.unwrap_or("".to_string());
                 if let Some(url) = video_url {
