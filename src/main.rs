@@ -25,7 +25,7 @@ async fn main() {
 
         dbm.create_user(
             chat.id, 
-            format!("{} {}", chat.first_name().unwrap(), chat.last_name().unwrap_or("")),
+            format!("{} {}", chat.first_name().unwrap_or(""), chat.last_name().unwrap_or("")),
             username
         );
         if let Some(link) = message.update.text() {
