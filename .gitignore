@@ -2,3 +2,5 @@
 .env
 Procfile
 rust-toolchain
+users.json
+.idea
