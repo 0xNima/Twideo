@@ -127,25 +127,3 @@ pub async fn get_twitter_data(tid: i64) -> Result<Option<TWD>, Box<dyn std::erro
         )
     )
 }
-
-pub async fn get_tweet_data(tid: i64) -> Result<String, Box<dyn std::error::Error>> {
-    // let client = reqwest::Client::new();
-    // let resp = client.get(format!("{}{}", *TWITTER_V2_URL, tid))
-    //                  .header("AUTHORIZATION", format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap()))
-    //                  .send()
-    //                  .await?;
-    // log::info!("V2 Status {}", resp.status().as_u16());
-
-    // let body = resp.json::<V2Body>().await?;
-
-    // let text = &body.data[0].text;
-    // let user = &body.includes.users[0];
-    // let name = &user.name;
-    // let username = &user.username;
-    
-    // let clean_text = RE.replace_all(text, "");
-    // let caption = format!("{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", clean_text, username, name);
-    
-    // Ok(caption)
-    Ok(format!(""))
-}
