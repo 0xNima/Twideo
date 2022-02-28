@@ -39,8 +39,9 @@ struct VideoInfo {
 
 #[derive(Deserialize, Debug)]
 struct Media {
-    video_info: VideoInfo,
-    r#type: String
+    video_info: Option<VideoInfo>,
+    r#type: String,
+    media_url_https: Option<String>
 }
 
 #[derive(Deserialize, Debug)]
@@ -49,37 +50,27 @@ struct ExtendenEntities {
 }
 
 #[derive(Deserialize, Debug)]
-struct Body {
-    extended_entities: ExtendenEntities
-}
-
-
-#[derive(Deserialize, Debug)]
-struct V2Data {
-    author_id: String,
-    id: String,
-    text: String
-}
-
-#[derive(Deserialize, Debug)]
 struct User {
-    id: String,
+    id_str: String,
     name: String,
-    username: String
+    screen_name: String
 }
 
 #[derive(Deserialize, Debug)]
-struct Includes {
-    users: Vec<User>
+struct Body {
+    extended_entities: Option<ExtendenEntities>,
+    full_text: Option<String>,
+    user: User
 }
 
-#[derive(Deserialize, Debug)]
-struct V2Body {
-    data: Vec<V2Data>,
-    includes: Includes
+
+pub struct TWD {
+    pub caption: String,
+    pub media_urls: Vec<String>,
+    pub r#type: String
 }
 
-pub async fn get_video_url(tid: i64) -> Result<Option<String>, Box<dyn std::error::Error>> {
+pub async fn get_twitter_data(tid: i64) -> Result<Option<TWD>, Box<dyn std::error::Error>> {
     log::info!("Send request to twitter");
     let client = reqwest::Client::new();
     let resp = client.get(format!("{}{}", *TWITTER_STATUS_URL, tid))
@@ -89,13 +80,20 @@ pub async fn get_video_url(tid: i64) -> Result<Option<String>, Box<dyn std::erro
     log::info!("Status {}", resp.status().as_u16());
 
     let body = resp.json::<Body>().await?;
+
+    let mut urls: Vec<String> = Vec::new();
+    let mut media_type = String::new();
+
+    if let Some(extenden_entities) = &body.extended_entities {
+        for media in &extenden_entities.media {
+            if media_type.is_empty() {
+                media_type = media.r#type.clone();
+            }
     
-    if body.extended_entities.media.len() > 0 {
-        for media in &body.extended_entities.media {
             if media.r#type == "video" {
                 let mut last_bitrate = 0;
                 let mut last_url = String::new();
-                for variant in &media.video_info.variants {
+                for variant in &media.video_info.as_ref().unwrap().variants {
                     if let Some(bitrate) = variant.bitrate {
                         if bitrate > last_bitrate {
                             last_url = variant.url.clone();
@@ -104,31 +102,50 @@ pub async fn get_video_url(tid: i64) -> Result<Option<String>, Box<dyn std::erro
                     }
                 }
                 if !last_url.is_empty() {
-                    return Ok(Some(last_url))
+                    urls.push(last_url);
                 }
+            } else if media.r#type == "photo" {
+                urls.push(media.media_url_https.as_ref().unwrap().to_string());                
             }
-        }
+        }            
     }
-    Ok(None)
+   
+    let clean_caption = body.full_text.as_ref().map(|text|{ return RE.replace_all(text, "") }).unwrap();
+    
+    Ok(
+        Some(
+            TWD {
+                caption: format!(
+                    "{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", 
+                    clean_caption, 
+                    body.user.screen_name, 
+                    body.user.name
+                ), 
+                media_urls: urls,
+                r#type: media_type
+            }
+        )
+    )
 }
 
 pub async fn get_tweet_data(tid: i64) -> Result<String, Box<dyn std::error::Error>> {
-    let client = reqwest::Client::new();
-    let resp = client.get(format!("{}{}", *TWITTER_V2_URL, tid))
-                     .header("AUTHORIZATION", format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap()))
-                     .send()
-                     .await?;
-    log::info!("V2 Status {}", resp.status().as_u16());
+    // let client = reqwest::Client::new();
+    // let resp = client.get(format!("{}{}", *TWITTER_V2_URL, tid))
+    //                  .header("AUTHORIZATION", format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap()))
+    //                  .send()
+    //                  .await?;
+    // log::info!("V2 Status {}", resp.status().as_u16());
 
-    let body = resp.json::<V2Body>().await?;
+    // let body = resp.json::<V2Body>().await?;
 
-    let text = &body.data[0].text;
-    let user = &body.includes.users[0];
-    let name = &user.name;
-    let username = &user.username;
+    // let text = &body.data[0].text;
+    // let user = &body.includes.users[0];
+    // let name = &user.name;
+    // let username = &user.username;
     
-    let clean_text = RE.replace_all(text, "");
-    let caption = format!("{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", clean_text, username, name);
+    // let clean_text = RE.replace_all(text, "");
+    // let caption = format!("{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", clean_text, username, name);
     
-    Ok(caption)
+    // Ok(caption)
+    Ok(format!(""))
 }
