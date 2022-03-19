@@ -3,16 +3,17 @@ extern crate lazy_static;
 use serde::Deserialize;
 use std::env;
 use regex::Regex;
-
+use rand::Rng;
 
 lazy_static::lazy_static! {
     static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
     static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?expansions=author_id&ids=";
     static ref RE : regex::Regex= Regex::new("https://t.co/\\w+\\b").unwrap();
+    pub static ref DATABASE_URL: String = env::var("DATABASE_URL").unwrap();
 }
 
-pub fn twitt_id(link: &str) -> Option<i64>{
-    let mut possible_id: i64 = 0;
+pub fn twitt_id(link: &str) -> Option<u64>{
+    let mut possible_id: u64 = 0;
     if let Some(_) = link.find("twitter.com") {
         let parsed: Vec<&str> = link.split("/").collect();
         let last_parts: Vec<&str> = parsed.last().unwrap().split("?").collect();
@@ -41,7 +42,7 @@ struct VideoInfo {
 struct Media {
     video_info: Option<VideoInfo>,
     r#type: String,
-    media_url_https: Option<String>
+    media_url_https: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -60,17 +61,22 @@ struct User {
 struct Body {
     extended_entities: Option<ExtendenEntities>,
     full_text: Option<String>,
-    user: User
+    user: User,
+    id: u64
 }
 
 
 pub struct TWD {
     pub caption: String,
     pub media_urls: Vec<String>,
-    pub r#type: String
+    pub r#type: String,
+    pub mime_type: Option<String>,
+    pub thumb: Option<String>,
+    pub name: String,
+    pub id: u64
 }
 
-pub async fn get_twitter_data(tid: i64) -> Result<Option<TWD>, Box<dyn std::error::Error>> {
+pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::error::Error>> {
     log::info!("Send request to twitter");
     let client = reqwest::Client::new();
     let resp = client.get(format!("{}{}", *TWITTER_STATUS_URL, tid))
@@ -83,13 +89,19 @@ pub async fn get_twitter_data(tid: i64) -> Result<Option<TWD>, Box<dyn std::erro
 
     let mut urls: Vec<String> = Vec::new();
     let mut media_type = String::new();
+    let mut mime_type: Option<String> = None;
+    let mut thumb: Option<String> = None;
 
     if let Some(extenden_entities) = &body.extended_entities {
         for media in &extenden_entities.media {
             if media_type.is_empty() {
                 media_type = media.r#type.clone();
             }
-    
+
+            if thumb.is_none() {
+                thumb = media.media_url_https.to_owned();
+            }
+
             if media.r#type == "video" {
                 let mut last_bitrate = 0;
                 let mut last_url = String::new();
@@ -100,12 +112,15 @@ pub async fn get_twitter_data(tid: i64) -> Result<Option<TWD>, Box<dyn std::erro
                             last_bitrate = bitrate;
                         }
                     }
+                    if mime_type.is_none() {
+                        mime_type = Some(variant.content_type.to_owned());
+                    }
                 }
                 if !last_url.is_empty() {
                     urls.push(last_url);
                 }
             } else if media.r#type == "photo" {
-                urls.push(media.media_url_https.as_ref().unwrap().to_string());                
+                urls.push(media.media_url_https.as_ref().unwrap().to_string());
             }
         }            
     }
@@ -122,8 +137,17 @@ pub async fn get_twitter_data(tid: i64) -> Result<Option<TWD>, Box<dyn std::erro
                     body.user.name
                 ), 
                 media_urls: urls,
-                r#type: media_type
+                r#type: media_type,
+                mime_type: mime_type,
+                thumb: thumb,
+                name: body.user.name,
+                id: body.id
             }
         )
     )
+}
+
+pub fn generate_code() -> String {
+    let mut rng = rand::thread_rng();
+    rng.gen_range(10000000..99999999).to_string()
 }
