@@ -20,7 +20,7 @@ use teloxide::{
         InlineQueryResultVideo, 
         InlineQueryResultPhoto,
         InlineKeyboardButton,
-        InlineKeyboardMarkup
+        InlineKeyboardMarkup, InlineQueryResultGif
     }, 
     payloads::SendMessageSetters,     
 };
@@ -39,8 +39,9 @@ enum Response {
 fn message_response_cb(twitter_data: &TWD) -> Response {
     let mut caption_is_set = false;
     let mut media_group = Vec::new();
-    
+
     for url in &twitter_data.media_urls {
+
         if &twitter_data.r#type == "photo" {
             let mut media = InputMediaPhoto::new(InputFile::url(Url::parse(url).unwrap()));
             if !caption_is_set {
@@ -49,7 +50,7 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
                 caption_is_set = true;
             }
             media_group.push(InputMedia::Photo(media));
-        } else if &twitter_data.r#type == "video" {
+        } else if &twitter_data.r#type == "video" || &twitter_data.r#type == "animated_gif" {
             let mut media = InputMediaVideo::new(InputFile::url(Url::parse(url).unwrap()));
             if !caption_is_set {
                 media = media.caption(&twitter_data.caption)
@@ -110,10 +111,21 @@ fn inline_query_response_cb(twitter_data: &TWD) -> Response {
                 .caption(twitter_data.caption.to_owned())
                 .parse_mode(ParseMode::Html)
             ));
+        } else if twitter_data.r#type == "animated_gif" {
+            inline_result.push(InlineQueryResult::Gif(
+                InlineQueryResultGif::new(
+                    generate_code(), 
+                    Url::parse(url).unwrap(),
+                    Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(), 
+                )
+                .caption(twitter_data.caption.to_owned())
+                .parse_mode(ParseMode::Html)
+                .title(twitter_data.name.to_owned())
+            ));
         }
     }
 
-    if &twitter_data.r#type != "photo" && &twitter_data.r#type != "video" {
+    if &twitter_data.r#type != "photo" && &twitter_data.r#type != "video" && &twitter_data.r#type != "animated_gif" {
         inline_result.push(InlineQueryResult::Article(
             InlineQueryResultArticle::new(
                 generate_code(),

@@ -5,6 +5,7 @@ use std::env;
 use regex::Regex;
 use rand::Rng;
 
+
 lazy_static::lazy_static! {
     static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
     static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?expansions=author_id&ids=";
@@ -61,10 +62,8 @@ struct User {
 struct Body {
     extended_entities: Option<ExtendenEntities>,
     full_text: Option<String>,
-    user: User,
-    id: u64
+    user: User
 }
-
 
 pub struct TWD {
     pub caption: String,
@@ -102,12 +101,12 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 thumb = media.media_url_https.to_owned();
             }
 
-            if media.r#type == "video" {
+            if media.r#type == "video" || media.r#type == "animated_gif" {
                 let mut last_bitrate = 0;
                 let mut last_url = String::new();
                 for variant in &media.video_info.as_ref().unwrap().variants {
                     if let Some(bitrate) = variant.bitrate {
-                        if bitrate > last_bitrate {
+                        if bitrate >= last_bitrate {
                             last_url = variant.url.clone();
                             last_bitrate = bitrate;
                         }
@@ -124,15 +123,45 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
             }
         }            
     }
-   
-    let clean_caption = body.full_text.as_ref().map(|text|{ return RE.replace_all(text, "") }).unwrap();
-    
+
+    let mut clean_caption = None;
+
+    let captures: Vec<&str> = RE.captures_iter(body.full_text.as_ref().unwrap())
+    .map(|c| c.get(0).unwrap().as_str())
+    .collect();
+
+    if captures.len() > 0 {
+        let mut captured = captures[captures.len() - 1];
+        
+        // means tweet doesn's contain media, so the link is real link (not media link)
+        if urls.is_empty() {
+            clean_caption = Some(
+                body.full_text.as_ref().unwrap().replace(captured, &format!("\n{}", captured))
+            );
+        } else {
+            clean_caption = Some(
+                body.full_text.as_ref().unwrap().replace(captured, "")
+            ); // remove media link
+            if captures.len() > 1 {
+                captured = captures[captures.len() - 2];
+                clean_caption = Some(
+                    clean_caption.as_ref().unwrap().replace(captured, &format!("\n{}", captured))
+                );
+            }
+        }
+    }
+
     Ok(
         Some(
             TWD {
                 caption: format!(
                     "{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", 
-                    clean_caption, 
+                    || -> &str {
+                        if clean_caption.is_none() {
+                            return body.full_text.as_ref().unwrap()
+                        }
+                        return clean_caption.as_ref().unwrap()
+                    }(), 
                     body.user.screen_name, 
                     body.user.name
                 ), 
@@ -141,7 +170,7 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 mime_type: mime_type,
                 thumb: thumb,
                 name: body.user.name,
-                id: body.id
+                id: tid
             }
         )
     )
