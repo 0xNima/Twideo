@@ -218,7 +218,6 @@ async fn callback_queries_handler(
     q: CallbackQuery,
     bot: AutoSend<Bot>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    q.message.unwrap().id;
     let tid: u64 = q.data.unwrap().parse().unwrap();
     let response = convert_to_tl_by_id(tid, message_response_cb).await;
 
