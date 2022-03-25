@@ -1,68 +1,52 @@
 extern crate lazy_static;
+extern crate m3u8_rs;
 
-use serde::Deserialize;
+use reqwest::Client;
 use std::env;
 use regex::Regex;
 use rand::Rng;
+use m3u8_rs::playlist::Playlist;
+use twitterVideodl::serde_schemes::*;
 
 
 lazy_static::lazy_static! {
     static ref TWITTER_STATUS_URL: &'static str = "https://api.twitter.com/1.1/statuses/show.json?extended_entities=true&tweet_mode=extended&id=";
     static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?expansions=author_id&ids=";
+    static ref TWITTER_GUEST_TOKEN_URL: &'static str = "https://api.twitter.com/1.1/guest/activate.json";
+    static ref TWITTER_BEARER_TOKEN: String = format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap());
+    static ref TWITTER_GUEST_BEARER_TOKEN: String = format!("Bearer {}", env::var("TWITTER_GUEST_BEARER_TOKEN").unwrap());
+    static ref TWITTER_AUDIO_SPACE_URL: String = format!(
+        "https://twitter.com/i/api/graphql/{}/AudioSpaceById?variables=\
+        %7B%22id%22%3A%22{{ID}}%22%2C%22isMetatagsQuery%22%3Afalse%2C%22withSuperFollowsUserFields%22%3Afalse%2C\
+        %22withDownvotePerspective%22%3Afalse%2C%22withReactionsMetadata%22%3Afalse%2C%22withReactionsPerspective%22%3Afalse%2C\
+        %20%22withSuperFollowsTweetFields%22%3Afalse%2C%22withReplays%22%3Afalse%2C\
+        %22__fs_dont_mention_me_view_api_enabled%22%3Afalse%2C%22__fs_interactive_text_enabled%22%3Afalse%2C\
+        %22__fs_responsive_web_uc_gql_enabled%22%3Afalse%7D
+        ",
+        env::var("GRAPHQL_PATH").unwrap()
+    );
+    static ref TWITTER_SPACE_METADATA_URL: &'static str = "https://twitter.com/i/api/1.1/live_video_stream/status/{MEDIA_KEY}?client=web&use_syndication_guest_id=false&cookie_set_host=twitter.com";
     static ref RE : regex::Regex= Regex::new("https://t.co/\\w+\\b").unwrap();
     pub static ref DATABASE_URL: String = env::var("DATABASE_URL").unwrap();
 }
 
-pub fn twitt_id(link: &str) -> Option<u64>{
-    let mut possible_id: u64 = 0;
-    if let Some(_) = link.find("twitter.com") {
-        let parsed: Vec<&str> = link.split("/").collect();
-        let last_parts: Vec<&str> = parsed.last().unwrap().split("?").collect();
-        possible_id = last_parts.first().unwrap().parse().unwrap_or(0);
+pub fn twitt_id(link: &str) -> TwitterID {
+    if link.starts_with("https://twitter.com/") {
+        if (&link[20..29]).starts_with("i/spaces/") {
+            let splited: Vec<&str> = (&link[29..]).split("?").collect();
+            if splited.len() > 0 {
+                return TwitterID::space_id(splited[0].to_string())
+            }
+        } else {
+            let parsed: Vec<&str> = (&link[20..]).split("/").collect();
+            let last_parts: Vec<&str> = parsed.last().unwrap().split("?").collect();            
+            let possible_id = last_parts.first().unwrap().parse().unwrap_or(0);   
+            if possible_id > 0 {
+                return TwitterID::id(possible_id);
+            }
+        }
     }
-    if possible_id > 0 {
-        return Some(possible_id);
-    }
-    None
-}
-
-
-#[derive(Deserialize, Debug)]
-struct Variant {
-    bitrate: Option<i32>,
-    content_type: String,
-    url: String
-}
- 
-#[derive(Deserialize, Debug)]
-struct VideoInfo {
-    variants: Vec<Variant>
-}
-
-#[derive(Deserialize, Debug)]
-struct Media {
-    video_info: Option<VideoInfo>,
-    r#type: String,
-    media_url_https: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct ExtendenEntities {
-    media: Vec<Media>
-}
-
-#[derive(Deserialize, Debug)]
-struct User {
-    id_str: String,
-    name: String,
-    screen_name: String
-}
-
-#[derive(Deserialize, Debug)]
-struct Body {
-    extended_entities: Option<ExtendenEntities>,
-    full_text: Option<String>,
-    user: User
+    TwitterID::None
 }
 
 pub struct TWD {
@@ -75,11 +59,17 @@ pub struct TWD {
     pub id: u64
 }
 
+pub enum TwitterID {
+    id(u64),
+    space_id(String),
+    None
+}
+
 pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::error::Error>> {
     log::info!("Send request to twitter");
     let client = reqwest::Client::new();
     let resp = client.get(format!("{}{}", *TWITTER_STATUS_URL, tid))
-                     .header("AUTHORIZATION", format!("Bearer {}", env::var("TWITTER_BEARER_TOKEN").unwrap()))
+                     .header("AUTHORIZATION", &*TWITTER_BEARER_TOKEN)
                      .send()
                      .await?;                     
     log::info!("Status {}", resp.status().as_u16());
@@ -179,4 +169,96 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
 pub fn generate_code() -> String {
     let mut rng = rand::thread_rng();
     rng.gen_range(10000000..99999999).to_string()
+}
+
+async fn guest_token(client: &Client) -> Option<String> {
+    let resp = client.post(*TWITTER_GUEST_TOKEN_URL)
+                     .header("AUTHORIZATION", &*TWITTER_GUEST_BEARER_TOKEN)
+                     .send()
+                     .await;
+    if let Ok(response) = resp {
+        if response.status().as_u16() != 200 {
+            return None;
+        }
+
+        if let Ok(token) = response.json::<GuestToken>().await {
+            return  Some(token.guest_token);
+        }
+    }
+    return None;
+}
+
+fn media_key_url(id: &str) -> String {
+    return TWITTER_AUDIO_SPACE_URL.replace("{ID}", id)
+}
+
+fn metadata_url(media_key: &str) -> String {
+    return TWITTER_SPACE_METADATA_URL.replace("{MEDIA_KEY}", media_key)
+}
+
+async fn space_media_key(client: &Client, space_id: &str) -> Option<SpaceMetadata> {
+    if let Some(token) = guest_token(&client).await {
+        let resp = client.get(&media_key_url(space_id))
+                     .header("x-guest-token", &token)
+                     .header("Authorization", &*TWITTER_GUEST_BEARER_TOKEN)
+                     .send()
+                     .await;
+        
+        if let Ok(response) = resp {
+            if response.status().as_u16() != 200 {
+                return None;
+            }
+            if let Ok(mut obj) = response.json::<SpaceObject>().await {
+                obj.data.audioSpace.metadata.token = Some(token);
+                return Some(obj.data.audioSpace.metadata);
+            }
+        }
+    }
+    return None
+}
+
+async fn space_playlist(client: &Client, space_id: &str) -> Option<String> {
+    if let Some(space_obj) = space_media_key(client, space_id).await {
+        let resp = client.get(metadata_url(&space_obj.media_key))
+                     .header("AUTHORIZATION", &*TWITTER_GUEST_BEARER_TOKEN)
+                     .header("X-Guest-Token", space_obj.token.unwrap())
+                     .send()
+                     .await;
+        if let Ok(response) = resp {
+            if response.status().as_u16() != 200 {
+                return None;
+            }
+            let data = response.json::<SpacePlaylist>().await.unwrap();
+            return Some(data.source.location)
+        }
+    }
+    return None
+}
+
+async fn download_space(client: &Client, location: &str) {
+    let resp = client.get(location)
+    .send()
+    .await;
+
+    if let Ok(response) = resp {
+        if response.status().as_u16() != 200 {
+            return;
+        }
+        
+        let bytes = response.bytes().await.unwrap();
+
+        match m3u8_rs::parse_playlist_res(&bytes) {
+            Ok(Playlist::MasterPlaylist(pl)) => println!("Master playlist:\n{:?}", pl),
+            Ok(Playlist::MediaPlaylist(pl)) => println!("Media playlist:\n{:?}", pl),
+            Err(e) => println!("Error: {:?}", e)
+        }
+    
+    }
+}
+
+pub async fn get_space(space_id: &str) {
+    let client = reqwest::Client::new();
+    if let Some(playlist) = space_playlist(&client, space_id).await {
+        download_space(&client, &playlist).await;
+    }
 }

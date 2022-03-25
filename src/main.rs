@@ -24,7 +24,7 @@ use teloxide::{
     }, 
     payloads::SendMessageSetters,     
 };
-use helpers::{get_twitter_data, twitt_id, generate_code, DATABASE_URL, TWD};
+use helpers::{get_twitter_data, twitt_id, generate_code, DATABASE_URL, TWD, TwitterID, get_space};
 use twitterVideodl::{DBManager};
 use reqwest::Url;
 
@@ -144,13 +144,19 @@ fn inline_query_response_cb(twitter_data: &TWD) -> Response {
 
 async fn convert_to_tl<F>(url: &str, callback: F) -> Response where
     F: Fn(&TWD) -> Response {
-    if let Some(id) = twitt_id(url) {
-        let data = get_twitter_data(id).await.unwrap_or(None);
-        if let Some(twitter_data) = data {
-            return callback(&twitter_data);
+        match twitt_id(url) {
+            TwitterID::id(id) => {
+                let data = get_twitter_data(id).await.unwrap_or(None);
+                if let Some(twitter_data) = data {
+                    return callback(&twitter_data);
+                }
+            },
+            TwitterID::space_id(space_id) => {
+                get_space(&space_id).await;
+            },
+            _ => {}
         }
-    }
-    return Response::None
+        return Response::None
 }
 
 async fn convert_to_tl_by_id<F>(id: u64, callback: F) -> Response where

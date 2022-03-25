@@ -52,3 +52,83 @@ impl DBManager {
         Ok(())
     }
 }
+
+
+pub mod serde_schemes {
+    use serde::Deserialize;
+
+
+    #[derive(Deserialize, Debug)]
+    pub struct Variant {
+        pub bitrate: Option<i32>,
+        pub content_type: String,
+        pub url: String
+    }
+    
+    #[derive(Deserialize, Debug)]
+    pub struct VideoInfo {
+        pub variants: Vec<Variant>
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct Media {
+        pub video_info: Option<VideoInfo>,
+        pub r#type: String,
+        pub media_url_https: Option<String>,
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct ExtendenEntities {
+        pub media: Vec<Media>
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct User {
+        pub id_str: String,
+        pub name: String,
+        pub screen_name: String
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct Body {
+        pub extended_entities: Option<ExtendenEntities>,
+        pub full_text: Option<String>,
+        pub user: User
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct GuestToken {
+        pub guest_token: String
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct SpaceObject {
+        pub data: SpaceData,
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct SpaceData {
+        pub audioSpace: AudioSpace,
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct AudioSpace {
+        pub metadata: SpaceMetadata,
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct SpaceMetadata {
+        pub media_key: String,
+        pub token: Option<String>
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct SpacePlaylist {
+        pub source: PlaylistSource
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct PlaylistSource {
+        pub location: String
+    }
+}
