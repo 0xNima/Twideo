@@ -2,5 +2,7 @@
 .env
 Procfile
 rust-toolchain
-users.json
+*.json
 .idea
+send_to_all.py
+
