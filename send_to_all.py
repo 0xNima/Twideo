@@ -20,7 +20,6 @@ for data in [other_json, json_data]:
     for item in data['values']:
         all_users.add(item[0])
 
-
 sent = []
 
 failure = []
@@ -32,40 +31,47 @@ async def send_request(url, payload):
         async with session.post(url=url, data=payload) as response:
             try:
                 if response.status != 200:
+                    print(payload['chat_id'], ": ", await response.text())
                     failure.append(payload['chat_id'])
                 else:
-                    print(payload['chat_id'])
+                    print(payload['chat_id'], ",")
                     sent.append(payload['chat_id']);
             except Exception as e:
                 failure.append(payload['chat_id'])
 
-            await asyncio.sleep(2)
-
 
 URL = "https://api.telegram.org/bot{}/sendMessage"
+VIDEO_MSG_URL = "https://api.telegram.org/bot{}/sendAnimation"
+
 
 TEXT = """
 🔔 🔔 🔔
 
-📌 Now you can copy the link of <b>any</b> twitt (not only those containing video) 
-and convert it to a <b>telegram</b> message\n
-Try it now 👉 copy and send <a href="https://twitter.com/telegram/status/1497210881557647365?s=20&t=UCHU5p2ZeKe-ZsZGO55DmQS">this</a> link
+📌
+
+🔵
+🔵
+🔴
 """
 
 
 async def main():
     tasks = []
+    chunk = 100
     for peer_id in users:
         _payload = {
             "chat_id": peer_id,
-            "text": TEXT,
+            "caption": TEXT,
             "parse_mode": "html",
-            "disable_web_page_preview": True
+            "disable_web_page_preview": True,
+            "animation": ""
         }
-        tasks.append(send_request(URL.format(os.getenv("TELOXIDE_TOKEN2")), _payload))
+        tasks.append(send_request(VIDEO_MSG_URL.format(os.getenv("TELOXIDE_TOKEN2")), _payload))
 
-    await asyncio.gather(*tasks)
-
+    for i in range(0, len(tasks), chunk):
+        chunked = tasks[i: i+chunk]
+        await asyncio.gather(*chunked)
+        await asyncio.sleep(1)
 
 if __name__ == '__main__':
     try:
