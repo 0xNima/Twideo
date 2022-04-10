@@ -29,8 +29,15 @@ use twitterVideodl::{DBManager};
 use reqwest::Url;
 
 
+struct MediaWithExtra {
+    media: Vec<InputMedia>,
+    extra_urls: Vec<String>,
+    caption: String,
+    allowed: bool
+}
+
 enum Response {
-    Media(Vec<InputMedia>),
+    Media(MediaWithExtra),
     Text(String),
     InlineResults(Vec<InlineQueryResult>),
     None
@@ -41,7 +48,6 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
     let mut media_group = Vec::new();
 
     for url in &twitter_data.media_urls {
-
         if &twitter_data.r#type == "photo" {
             let mut media = InputMediaPhoto::new(InputFile::url(Url::parse(url).unwrap()));
             if !caption_is_set {
@@ -61,9 +67,17 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
         }
     }
     if !caption_is_set {
-        return Response::Text(twitter_data.caption.to_owned());
+        return Response::Text(twitter_data.caption.to_string());
     }
-    return Response::Media(media_group);
+
+    return Response::Media(
+        MediaWithExtra{
+            media: media_group, 
+            extra_urls: twitter_data.extra_urls.to_vec(),
+            caption: twitter_data.caption.to_string(),
+            allowed: (&twitter_data.r#type == "video" || &twitter_data.r#type == "animated_gif")
+        }
+    );
 }
 
 
@@ -193,8 +207,30 @@ async fn message_handler(
                     .disable_web_page_preview(true)
                     .await?;
                 },
-                Response::Media(media_group) => {
-                    bot.send_media_group(chat.id, media_group).await?;
+                Response::Media(media_with_extra) => {
+                    let response = bot.send_media_group(chat.id, media_with_extra.media).await;
+
+                    if response.is_err() && media_with_extra.allowed {
+                        bot.send_message(
+                            chat.id, 
+                            format!("Telegram is unable to download high quality video.\nI will send you other qualities.")
+                        ).parse_mode(ParseMode::Html)
+                        .disable_web_page_preview(true)
+                        .await?;
+
+                        for url in &media_with_extra.extra_urls {
+                            bot.send_media_group(chat.id, [
+                                InputMedia::Video(
+                                    InputMediaVideo::new(
+                                        InputFile::url(Url::parse(url).unwrap())
+                                    )
+                                    .caption(&media_with_extra.caption)
+                                    .parse_mode(ParseMode::Html)
+                                )
+                            ]).await?;   
+                        }
+
+                    }
                 },
                 _ => ()
             }
@@ -225,8 +261,8 @@ async fn callback_queries_handler(
     let response = convert_to_tl_by_id(tid, message_response_cb).await;
 
     match response {
-        Response::Media(media_group) => {
-            bot.send_media_group(q.from.id, media_group).await?;
+        Response::Media(media_with_extra) => {
+            bot.send_media_group(q.from.id, media_with_extra.media).await?;
         },
         _ => ()
     }

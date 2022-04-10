@@ -35,7 +35,8 @@ pub struct TWD {
     pub mime_type: Option<String>,
     pub thumb: Option<String>,
     pub name: String,
-    pub id: u64
+    pub id: u64,
+    pub extra_urls: Vec<String>
 }
 
 pub enum TwitterID {
@@ -61,6 +62,7 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
     let body = resp.json::<Body>().await?;
 
     let mut urls: Vec<String> = Vec::new();
+    let mut extra_urls: Vec<String> = Vec::new();
     let mut media_type = String::new();
     let mut mime_type: Option<String> = None;
     let mut thumb: Option<String> = None;
@@ -80,8 +82,10 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 let mut last_url = String::new();
                 for variant in &media.video_info.as_ref().unwrap().variants {
                     if let Some(bitrate) = variant.bitrate {
+                        extra_urls.push(variant.url.to_string());
+
                         if bitrate >= last_bitrate {
-                            last_url = variant.url.clone();
+                            last_url = variant.url.to_string();
                             last_bitrate = bitrate;
                         }
                     }
@@ -144,7 +148,8 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 mime_type: mime_type,
                 thumb: thumb,
                 name: body.user.name,
-                id: tid
+                id: tid,
+                extra_urls: extra_urls
             }
         )
     )
