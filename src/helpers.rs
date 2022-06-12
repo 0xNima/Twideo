@@ -32,11 +32,11 @@ pub struct TWD {
     pub caption: String,
     pub media_urls: Vec<String>,
     pub r#type: String,
-    pub mime_type: Option<String>,
     pub thumb: Option<String>,
     pub name: String,
     pub id: u64,
-    pub extra_urls: Vec<String>
+    pub extra_urls: Vec<Variant>,
+
 }
 
 pub enum TwitterID {
@@ -62,9 +62,8 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
     let body = resp.json::<Body>().await?;
 
     let mut urls: Vec<String> = Vec::new();
-    let mut extra_urls: Vec<String> = Vec::new();
+    let mut extra_urls: Vec<Variant> = Vec::new();
     let mut media_type = String::new();
-    let mut mime_type: Option<String> = None;
     let mut thumb: Option<String> = None;
 
     if let Some(extenden_entities) = &body.extended_entities {
@@ -82,15 +81,11 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 let mut last_url = String::new();
                 for variant in &media.video_info.as_ref().unwrap().variants {
                     if let Some(bitrate) = variant.bitrate {
-                        extra_urls.push(variant.url.to_string());
-
+                        extra_urls.push(variant.to_owned());
                         if bitrate >= last_bitrate {
                             last_url = variant.url.to_string();
                             last_bitrate = bitrate;
                         }
-                    }
-                    if mime_type.is_none() {
-                        mime_type = Some(variant.content_type.to_owned());
                     }
                 }
                 if !last_url.is_empty() {
@@ -145,7 +140,6 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 ), 
                 media_urls: urls,
                 r#type: media_type,
-                mime_type: mime_type,
                 thumb: thumb,
                 name: body.user.name,
                 id: tid,

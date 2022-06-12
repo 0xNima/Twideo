@@ -25,13 +25,13 @@ use teloxide::{
     payloads::SendMessageSetters,     
 };
 use helpers::{get_twitter_data, twitt_id, DATABASE_URL, generate_code, TWD, TwitterID};
-use twitterVideodl::{DBManager};
+use twitterVideodl::{DBManager, serde_schemes::Variant};
 use reqwest::Url;
 
 
 struct MediaWithExtra {
     media: Vec<InputMedia>,
-    extra_urls: Vec<String>,
+    extra_urls: Vec<Variant>,
     caption: String,
     allowed: bool
 }
@@ -84,74 +84,78 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
 fn inline_query_response_cb(twitter_data: &TWD) -> Response {
     let mut inline_result: Vec<InlineQueryResult> = Vec::new();
 
-    for url in &twitter_data.media_urls {
-        if &twitter_data.r#type == "photo" {
+    match twitter_data.r#type.as_str() {
+        "photo" => {
             let mut inline_photo = InlineQueryResultPhoto::new(
                 generate_code(), 
-                Url::parse(url).unwrap(),
+                Url::parse(&twitter_data.media_urls[0]).unwrap(),
                 Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap()
             )
             .title(twitter_data.name.to_owned())
             .caption(twitter_data.caption.to_owned())
             .parse_mode(ParseMode::Html);
-
+    
             if twitter_data.media_urls.len() > 1 {
                 let keyboard: Vec<Vec<InlineKeyboardButton>> = vec![
                     vec![
                         InlineKeyboardButton::callback(
-                            "see album".to_string(),
+                            "See Album".to_string(),
                             twitter_data.id.to_string()
                         )
                     ]
                 ];
-
+    
                 inline_photo = inline_photo.reply_markup(
                     InlineKeyboardMarkup::new(keyboard)
                 );
             }
             
             inline_result.push(InlineQueryResult::Photo(inline_photo));
+        },
+        "video" => {
+            for variant in &twitter_data.extra_urls {
+                inline_result.push(InlineQueryResult::Video(
+                    InlineQueryResultVideo::new(
+                        generate_code(), 
+                        Url::parse(variant.url.as_str()).unwrap(),
+                        variant.content_type.parse().unwrap(),
+                        Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(), 
+                        format!("{} (Bitrate {})", twitter_data.name.to_owned(), variant.bitrate.unwrap_or(0))
+                    )
+                    .caption(twitter_data.caption.to_owned())
+                    .parse_mode(ParseMode::Html)
+                ));
+            }
+        },
+        "animated_gif" => {
+            for variant in &twitter_data.extra_urls {
+                inline_result.push(InlineQueryResult::Gif(
+                    InlineQueryResultGif::new(
+                        generate_code(), 
+                        Url::parse(variant.url.as_str()).unwrap(),
+                        Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(),
 
-            break
-        } else if twitter_data.r#type == "video" {
-            inline_result.push(InlineQueryResult::Video(
-                InlineQueryResultVideo::new(
-                    generate_code(), 
-                    Url::parse(url).unwrap(),
-                    twitter_data.mime_type.as_ref().unwrap().parse().unwrap(),
-                    Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(), 
-                    twitter_data.name.to_owned()
+                    )
+                    .caption(twitter_data.caption.to_owned())
+                    .parse_mode(ParseMode::Html)
+                    .title(format!("{} (Bitrate {})", twitter_data.name.to_owned(), variant.bitrate.unwrap_or(0)))
+                ));
+            }
+        },
+        _ => {
+            inline_result.push(InlineQueryResult::Article(
+                InlineQueryResultArticle::new(
+                    generate_code(),
+                    twitter_data.name.to_owned(),
+                    InputMessageContent::Text(
+                        InputMessageContentText::new(twitter_data.caption.to_owned())
+                            .parse_mode(ParseMode::Html)
+                            .disable_web_page_preview(true),
+                    ),
                 )
-                .caption(twitter_data.caption.to_owned())
-                .parse_mode(ParseMode::Html)
-            ));
-        } else if twitter_data.r#type == "animated_gif" {
-            inline_result.push(InlineQueryResult::Gif(
-                InlineQueryResultGif::new(
-                    generate_code(), 
-                    Url::parse(url).unwrap(),
-                    Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(), 
-                )
-                .caption(twitter_data.caption.to_owned())
-                .parse_mode(ParseMode::Html)
-                .title(twitter_data.name.to_owned())
+                .description(twitter_data.caption.to_owned()),
             ));
         }
-    }
-
-    if &twitter_data.r#type != "photo" && &twitter_data.r#type != "video" && &twitter_data.r#type != "animated_gif" {
-        inline_result.push(InlineQueryResult::Article(
-            InlineQueryResultArticle::new(
-                generate_code(),
-                twitter_data.name.to_owned(),
-                InputMessageContent::Text(
-                    InputMessageContentText::new(twitter_data.caption.to_owned())
-                        .parse_mode(ParseMode::Html)
-                        .disable_web_page_preview(true),
-                ),
-            )
-            .description(twitter_data.caption.to_owned()),
-        ));
     }
     return Response::InlineResults(inline_result);
 }
@@ -218,16 +222,16 @@ async fn message_handler(
                         .disable_web_page_preview(true)
                         .await?;
 
-                        for url in &media_with_extra.extra_urls {
+                        for variant in &media_with_extra.extra_urls {
                             bot.send_media_group(chat.id, [
                                 InputMedia::Video(
                                     InputMediaVideo::new(
-                                        InputFile::url(Url::parse(url).unwrap())
+                                        InputFile::url(Url::parse(variant.url.as_str()).unwrap())
                                     )
                                     .caption(&media_with_extra.caption)
                                     .parse_mode(ParseMode::Html)
                                 )
-                            ]).await?;   
+                            ]).await?;
                         }
 
                     }

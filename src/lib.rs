@@ -58,7 +58,7 @@ pub mod serde_schemes {
     use serde::Deserialize;
 
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Deserialize, Debug, Clone)]
     pub struct Variant {
         pub bitrate: Option<i32>,
         pub content_type: String,
