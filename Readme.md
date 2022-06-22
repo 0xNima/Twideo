@@ -20,3 +20,13 @@ $ set DATABASE_URL=<Your database url>
 Of course you can create a `.env` file and set your environmental variables there.
 ```
 5. Run `cargo run` and enjoy the life :)
+
+## Getting Started
+Just copy the link of the tweet and send it to the bat, It will convert tweet to telegram message:
+
+![example](https://user-images.githubusercontent.com/79907489/174974007-cfc58c13-08d5-4b3e-b6ed-9d797fc4fb86.gif)
+
+
+This bot also supports Inline mode:
+
+![inline-example](https://user-images.githubusercontent.com/79907489/174976466-95406e20-30d8-4014-b78b-e9bd51ce126c.gif)
