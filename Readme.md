@@ -22,7 +22,7 @@ Of course you can create a `.env` file and set your environmental variables ther
 5. Run `cargo run` and enjoy the life :)
 
 ## Getting Started
-Just copy the link of the tweet and send it to the bat, It will convert tweet to telegram message:
+Just copy the link of the tweet and send it to the bot, It will convert tweet to telegram message:
 
 ![example](https://user-images.githubusercontent.com/79907489/174974007-cfc58c13-08d5-4b3e-b6ed-9d797fc4fb86.gif)
 
