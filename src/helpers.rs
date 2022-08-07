@@ -15,7 +15,7 @@ lazy_static::lazy_static! {
 }
 
 pub fn twitt_id(link: &str) -> TwitterID {
-    if link.starts_with("https://twitter.com/") {
+    if link.starts_with("https://twitter.com/") ||  link.starts_with("https://mobile.twitter.com/") {
         if !link.starts_with("https://twitter.com/i/spaces/") {
             let parsed: Vec<&str> = (&link[20..]).split("/").collect();
             let last_parts: Vec<&str> = parsed.last().unwrap().split("?").collect();            
@@ -128,14 +128,15 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
         Some(
             TWD {
                 caption: format!(
-                    "{} \n\n<a href='https://twitter.com/{}'>&#x1F464 {}</a>", 
+                    "{} \n\n<a href='https://twitter.com/{}/status/{}'>&#x1F464 {}</a>", 
                     || -> &str {
                         if clean_caption.is_none() {
                             return body.full_text.as_ref().unwrap()
                         }
                         return clean_caption.as_ref().unwrap()
-                    }(), 
-                    body.user.screen_name, 
+                    }(),
+                    body.user.screen_name,
+                    tid, 
                     body.user.name
                 ), 
                 media_urls: urls,
