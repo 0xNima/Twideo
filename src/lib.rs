@@ -57,29 +57,11 @@ impl DBManager {
 pub mod serde_schemes {
     use serde::Deserialize;
 
-
     #[derive(Deserialize, Debug, Clone)]
     pub struct Variant {
-        pub bitrate: Option<i32>,
+        pub bit_rate: Option<i32>,
         pub content_type: String,
         pub url: String
-    }
-    
-    #[derive(Deserialize, Debug)]
-    pub struct VideoInfo {
-        pub variants: Vec<Variant>
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct Media {
-        pub video_info: Option<VideoInfo>,
-        pub r#type: String,
-        pub media_url_https: Option<String>,
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct ExtendenEntities {
-        pub media: Vec<Media>
     }
 
     #[derive(Deserialize, Debug)]
@@ -90,45 +72,33 @@ pub mod serde_schemes {
     }
 
     #[derive(Deserialize, Debug)]
-    pub struct Body {
-        pub extended_entities: Option<ExtendenEntities>,
-        pub full_text: Option<String>,
-        pub user: User
+    pub struct Media {
+        pub r#type: String,
+        pub preview_image_url: Option<String>,
+        pub variants: Option<Vec<Variant>>,
+        pub url: Option<String>
     }
 
     #[derive(Deserialize, Debug)]
-    pub struct GuestToken {
-        pub guest_token: String
+    pub struct TwitterUser {
+        pub name: String,
+        pub username: String
     }
 
     #[derive(Deserialize, Debug)]
-    pub struct SpaceObject {
-        pub data: SpaceData,
+    pub struct MultimediaIncludes {
+        pub media: Option<Vec<Media>>,
+        pub users: Vec<TwitterUser>
+    }
+    
+    #[derive(Deserialize, Debug)]
+    pub struct MultimediaData {
+        pub text: Option<String>
     }
 
     #[derive(Deserialize, Debug)]
-    pub struct SpaceData {
-        pub audioSpace: AudioSpace,
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct AudioSpace {
-        pub metadata: SpaceMetadata,
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct SpaceMetadata {
-        pub media_key: String,
-        pub token: Option<String>
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct SpacePlaylist {
-        pub source: PlaylistSource
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct PlaylistSource {
-        pub location: String
+    pub struct MultimediaBody {
+        pub includes: Option<MultimediaIncludes>,
+        pub data: MultimediaData
     }
 }

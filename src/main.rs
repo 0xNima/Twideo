@@ -46,24 +46,32 @@ enum Response {
 fn message_response_cb(twitter_data: &TWD) -> Response {
     let mut caption_is_set = false;
     let mut media_group = Vec::new();
+    let mut allowed = false;
 
-    for url in &twitter_data.media_urls {
-        if &twitter_data.r#type == "photo" {
-            let mut media = InputMediaPhoto::new(InputFile::url(Url::parse(url).unwrap()));
+    for media in &twitter_data.twitter_media {
+        let input_file = InputFile::url(
+            Url::parse(
+                &media.url
+            ).unwrap()
+        );
+
+        if media.r#type == "photo" {
+            let mut tl_media = InputMediaPhoto::new(input_file);
             if !caption_is_set {
-                media = media.caption(&twitter_data.caption)
+                tl_media = tl_media.caption(&twitter_data.caption)
                 .parse_mode(ParseMode::Html);
                 caption_is_set = true;
             }
-            media_group.push(InputMedia::Photo(media));
-        } else if &twitter_data.r#type == "video" || &twitter_data.r#type == "animated_gif" {
-            let mut media = InputMediaVideo::new(InputFile::url(Url::parse(url).unwrap()));
+            media_group.push(InputMedia::Photo(tl_media));
+        } else if media.r#type == "video" || media.r#type == "animated_gif" {
+            allowed = true;
+            let mut tl_media = InputMediaVideo::new(input_file);
             if !caption_is_set {
-                media = media.caption(&twitter_data.caption)
+                tl_media = tl_media.caption(&twitter_data.caption)
                 .parse_mode(ParseMode::Html);
                 caption_is_set = true;
             }
-            media_group.push(InputMedia::Video(media));
+            media_group.push(InputMedia::Video(tl_media));
         }
     }
     if !caption_is_set {
@@ -75,7 +83,7 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
             media: media_group, 
             extra_urls: twitter_data.extra_urls.to_vec(),
             caption: twitter_data.caption.to_string(),
-            allowed: (&twitter_data.r#type == "video" || &twitter_data.r#type == "animated_gif")
+            allowed
         }
     );
 }
@@ -84,77 +92,81 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
 fn inline_query_response_cb(twitter_data: &TWD) -> Response {
     let mut inline_result: Vec<InlineQueryResult> = Vec::new();
 
-    match twitter_data.r#type.as_str() {
-        "photo" => {
-            let mut inline_photo = InlineQueryResultPhoto::new(
-                generate_code(), 
-                Url::parse(&twitter_data.media_urls[0]).unwrap(),
-                Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap()
+    if twitter_data.twitter_media.is_empty() {
+        inline_result.push(InlineQueryResult::Article(
+            InlineQueryResultArticle::new(
+                generate_code(),
+                &twitter_data.name,
+                InputMessageContent::Text(
+                    InputMessageContentText::new(&twitter_data.caption)
+                        .parse_mode(ParseMode::Html)
+                        .disable_web_page_preview(true),
+                ),
             )
-            .title(twitter_data.name.to_owned())
-            .caption(twitter_data.caption.to_owned())
-            .parse_mode(ParseMode::Html);
-    
-            if twitter_data.media_urls.len() > 1 {
-                let keyboard: Vec<Vec<InlineKeyboardButton>> = vec![
-                    vec![
-                        InlineKeyboardButton::callback(
-                            "See Album".to_string(),
-                            twitter_data.id.to_string()
-                        )
-                    ]
-                ];
-    
-                inline_photo = inline_photo.reply_markup(
-                    InlineKeyboardMarkup::new(keyboard)
-                );
-            }
-            
-            inline_result.push(InlineQueryResult::Photo(inline_photo));
-        },
-        "video" => {
-            for variant in &twitter_data.extra_urls {
-                inline_result.push(InlineQueryResult::Video(
-                    InlineQueryResultVideo::new(
-                        generate_code(), 
-                        Url::parse(variant.url.as_str()).unwrap(),
-                        variant.content_type.parse().unwrap(),
-                        Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(), 
-                        format!("{} (Bitrate {})", twitter_data.name.to_owned(), variant.bitrate.unwrap_or(0))
-                    )
-                    .caption(twitter_data.caption.to_owned())
-                    .parse_mode(ParseMode::Html)
-                ));
-            }
-        },
-        "animated_gif" => {
-            for variant in &twitter_data.extra_urls {
-                inline_result.push(InlineQueryResult::Gif(
-                    InlineQueryResultGif::new(
-                        generate_code(), 
-                        Url::parse(variant.url.as_str()).unwrap(),
-                        Url::parse(&twitter_data.thumb.as_ref().unwrap_or(&"".to_owned())).unwrap(),
+            .description(&twitter_data.caption),
+        ));
+    }
 
-                    )
-                    .caption(twitter_data.caption.to_owned())
-                    .parse_mode(ParseMode::Html)
-                    .title(format!("{} (Bitrate {})", twitter_data.name.to_owned(), variant.bitrate.unwrap_or(0)))
-                ));
-            }
-        },
-        _ => {
-            inline_result.push(InlineQueryResult::Article(
-                InlineQueryResultArticle::new(
-                    generate_code(),
-                    twitter_data.name.to_owned(),
-                    InputMessageContent::Text(
-                        InputMessageContentText::new(twitter_data.caption.to_owned())
-                            .parse_mode(ParseMode::Html)
-                            .disable_web_page_preview(true),
-                    ),
+    for media in &twitter_data.twitter_media {
+        match media.r#type.as_str() {
+            "photo" => {
+                let mut inline_photo = InlineQueryResultPhoto::new(
+                    generate_code(), 
+                    Url::parse(&media.url).unwrap(),
+                    Url::parse(&media.thumb).unwrap()
                 )
-                .description(twitter_data.caption.to_owned()),
-            ));
+                .title(&twitter_data.name)
+                .caption(&twitter_data.caption)
+                .parse_mode(ParseMode::Html);
+        
+                if twitter_data.twitter_media.len() > 1 {
+                    let keyboard: Vec<Vec<InlineKeyboardButton>> = vec![
+                        vec![
+                            InlineKeyboardButton::callback(
+                                "See Album".to_string(),
+                                twitter_data.id.to_string()
+                            )
+                        ]
+                    ];
+        
+                    inline_photo = inline_photo.reply_markup(
+                        InlineKeyboardMarkup::new(keyboard)
+                    );
+                }
+                
+                inline_result.push(InlineQueryResult::Photo(inline_photo));
+            },
+            "video" => {
+                for variant in &twitter_data.extra_urls {
+                    inline_result.push(InlineQueryResult::Video(
+                        InlineQueryResultVideo::new(
+                            generate_code(), 
+                            Url::parse(variant.url.as_str()).unwrap(),
+                            variant.content_type.parse().unwrap(),
+                            Url::parse(&media.thumb).unwrap(), 
+                            format!("{} (Bitrate {})", &twitter_data.name, variant.bit_rate.unwrap_or(0))
+                        )
+                        .caption(&twitter_data.caption)
+                        .parse_mode(ParseMode::Html)
+                    ));
+                }
+            },
+            "animated_gif" => {
+                for variant in &twitter_data.extra_urls {
+                    inline_result.push(InlineQueryResult::Gif(
+                        InlineQueryResultGif::new(
+                            generate_code(), 
+                            Url::parse(variant.url.as_str()).unwrap(),
+                            Url::parse(&media.thumb).unwrap(),
+    
+                        )
+                        .caption(&twitter_data.caption)
+                        .parse_mode(ParseMode::Html)
+                        .title(format!("{} (Bitrate {})", twitter_data.name, variant.bit_rate.unwrap_or(0)))
+                    ));
+                }
+            },
+            _ => {}
         }
     }
     return Response::InlineResults(inline_result);
