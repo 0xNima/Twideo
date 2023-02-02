@@ -5,7 +5,7 @@
  2. Create a new bot using [@Botfather](https://t.me/botfather) to get a token in the format `123456789:blablabla`.
  3. Get an [twitter access token](https://developer.twitter.com/en/apply-for-access).
  4. Optional Step: Install [PostgreSQL](https://www.postgresql.org/download/) database
- 5. Initialise the `TWITTER_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN2`(to handle too many requests per second), `TELOXIDE_TOKEN` and `DATABASE_URL`(optional) environmental variable to your token:
+ 5. initialize the `TWITTER_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN2`(to handle too many requests per second), `TELOXIDE_TOKEN` and `DATABASE_URL`(optional) environmental variable to your token:
 ```bash
 # Unix-like
 $ export TELOXIDE_TOKEN=<Your token here>
