@@ -17,6 +17,9 @@ type DieselResult<U> = std::result::Result<U, diesel::result::Error>;
 
 impl DBManager {
     pub fn new(db_url: &str) -> Result<DBManager> {
+        if db_url.is_empty() {
+            return Err(());
+        }
         Ok(DBManager {connection: PgConnection::establish(db_url).unwrap()})
     }
 

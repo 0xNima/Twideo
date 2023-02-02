@@ -201,13 +201,15 @@ async fn message_handler(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let chat = &m.chat;
     let username = chat.username().map(String::from);
-    let dbm = DBManager::new(&&DATABASE_URL).unwrap();
+    let dbm = DBManager::new(&&DATABASE_URL);
 
-    dbm.create_user(
-        chat.id, 
-        format!("{} {}", chat.first_name().unwrap_or(""), chat.last_name().unwrap_or("")),
-        username
-    );
+    if dbm.is_ok() {
+        dbm.unwrap().create_user(
+            chat.id, 
+            format!("{} {}", chat.first_name().unwrap_or(""), chat.last_name().unwrap_or("")),
+            username
+        );
+    }
 
     if let Some(maybe_url) = m.text() {
         if maybe_url == "/start" {
