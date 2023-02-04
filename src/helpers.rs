@@ -55,7 +55,6 @@ pub struct TWD {
     pub id: u64,
     pub extra_urls: Vec<Variant>,
     pub conversation_id: u64,
-    pub user_id: u64,
     pub next: u8,
     pub thread_count: usize,
 }
@@ -98,8 +97,8 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
     let mut extra_urls: Vec<Variant> = Vec::new();
     let mut name = String::new();
     let mut username = String::new();
-    let mut conversation_id = multimedia.data.conversation_id.unwrap().parse::<u64>().unwrap();
-    let mut user_id = multimedia.data.author_id.unwrap().parse::<u64>().unwrap();
+    let conversation_id = multimedia.data.conversation_id.unwrap().parse::<u64>().unwrap();
+    let user_id = multimedia.data.author_id.unwrap().parse::<u64>().unwrap();
 
     let thread_count = fetch_threads(conversation_id, user_id).await;
 
@@ -200,7 +199,6 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
                 extra_urls: extra_urls,
                 next: 1,
                 conversation_id: conversation_id,
-                user_id: user_id,
                 thread_count
             }
         )
@@ -208,7 +206,7 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
 }
 
 const CONVERSATION_KEY: &str = "conversation";
-const EXPIRE_KEY_TTL: u16 = 20;
+const EXPIRE_KEY_TTL: u16 = 3600;
 
 async fn fetch_threads(conversation_id: u64, user_id: u64) -> usize {
     let client = redis::Client::open(&**REDIS_URL);
@@ -235,7 +233,7 @@ async fn fetch_threads(conversation_id: u64, user_id: u64) -> usize {
     
     let response = client.get(
         format!(
-            "{0}?query=conversation_id:{1} from:{2} to:{2}&max_results=100",
+            "{0}?query=conversation_id:{1} from:{2} to:{2}&tweet.fields=author_id,referenced_tweets&max_results=100",
             &*TWITTER_SEARCH_URL,
             conversation_id,
             user_id
@@ -255,18 +253,49 @@ async fn fetch_threads(conversation_id: u64, user_id: u64) -> usize {
     log::info!("Status {}", result.status().as_u16());
 
     let response_json = result.json::<ThreadSearchResult>().await.unwrap();
+    let mut search_data = response_json.data.unwrap_or(vec![]);
 
-    let thread_ids = response_json.data
-    .iter()
-    .map(|x|x.id.parse::<u64>().unwrap())
-    .collect::<Vec<u64>>()
-    .into_iter();
+    let mut thread_ids: Vec<u64> = vec![];
+    let mut last_reference: u64 = 0;
+
+    while !search_data.is_empty() {
+        let obj = search_data.pop().unwrap();
+        let current_id = obj.id.parse::<u64>().unwrap();
+
+        if last_reference == 0 {
+            // first thread
+            last_reference = current_id;
+            thread_ids.push(current_id);
+
+            continue;
+        }
+
+        let reference = obj.referenced_tweets
+        .into_iter()
+        .find(|x| x.r#type == "replied_to");
+
+        if let Some(reference) = reference {
+            let reference_id = reference.id.parse::<u64>().unwrap();
+            if reference_id == last_reference {
+                last_reference = current_id;
+                thread_ids.push(current_id);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
 
     threads_count = thread_ids.len();
 
+    if threads_count == 0 {
+        return 0;
+    }
+
     let mut pipe = redis::pipe();
 
-    for (i, id) in thread_ids.enumerate() {
+    for (i, id) in thread_ids.iter().enumerate() {
         pipe.cmd("HSET").arg(redis_key.clone()).arg(i+1).arg(id);
     }
     pipe.cmd("EXPIRE").arg(redis_key.clone()).arg(EXPIRE_KEY_TTL);

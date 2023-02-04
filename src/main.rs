@@ -67,10 +67,9 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
                     InlineKeyboardButton::callback(
                         "Next thread".to_string(),
                         format!(
-                            "{}_{}_{}_{}",
+                            "{}_{}_{}",
                             THREAD,
                             twitter_data.conversation_id,
-                            twitter_data.user_id,
                             twitter_data.next
                         )
                     )
@@ -163,7 +162,7 @@ fn inline_query_response_cb(twitter_data: &TWD) -> Response {
                         vec![
                             InlineKeyboardButton::callback(
                                 "See Album".to_string(),
-                                twitter_data.id.to_string()
+                                format!("{}_{}", FULL_ALBUM, twitter_data.id)
                             )
                         ]
                     ];
@@ -345,13 +344,16 @@ async fn callback_queries_handler(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let query = q.data.unwrap();
     let query_parts = query.split('_').collect::<Vec<&str>>();
+    
+    if query_parts.len() < 2 || query_parts.len() > 3 {
+        // for backward compatibility. Maybe some old reply markups contain invalid data format
+        return Ok(());
+    }
     let query_type = query_parts[0].parse::<u8>().unwrap();
 
     match query_type {
         FULL_ALBUM => {
-            /**
-             * query template: <query-type>_<tweet-id>
-             */
+            // query template: <query-type>_<tweet-id>
             let tid = query_parts[1].parse::<u64>().unwrap();
             let response = convert_to_tl_by_id(tid, 1, message_response_cb).await;
             match response {
@@ -362,12 +364,9 @@ async fn callback_queries_handler(
             }
         },
         THREAD => {
-            /**
-             * query template: <query-type>_<conversation-id>_<user-id>_<thread-number>
-             */
+            // query template: <query-type>_<conversation-id>_<thread-number>
             let conversation_id = query_parts[1].parse::<u64>().unwrap();
-            let user_id = query_parts[2].parse::<u64>().unwrap();
-            let thread_number = query_parts[3].parse::<u8>().unwrap();
+            let thread_number = query_parts[2].parse::<u8>().unwrap();
 
             let tid = get_thread(conversation_id, thread_number).await;
 

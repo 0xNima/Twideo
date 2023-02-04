@@ -107,14 +107,20 @@ pub mod serde_schemes {
         pub data: MultimediaData
     }
 
+    #[derive(Deserialize, Debug)]
+    pub struct ReferencedTweets {
+        pub id: String,
+        pub r#type: String,
+    }
 
     #[derive(Deserialize, Debug)]
     pub struct ThreadSearchData {
         pub id: String,
+        pub referenced_tweets: Vec<ReferencedTweets>,
     }
 
     #[derive(Deserialize, Debug)]
     pub struct ThreadSearchResult {
-        pub data: Vec<ThreadSearchData>
+        pub data: Option<Vec<ThreadSearchData>>
     }
 }
