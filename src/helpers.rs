@@ -1,10 +1,12 @@
 extern crate lazy_static;
+extern crate redis;
 
-use std::{env, fmt::format};
+use std::{env};
 use regex::Regex;
 use rand::Rng;
 use rand::seq::SliceRandom;
 use twitterVideodl::serde_schemes::*;
+use redis::Commands;
 
 
 lazy_static::lazy_static! {
@@ -21,6 +23,7 @@ lazy_static::lazy_static! {
     static ref TWITTER_EXPANSIONS_PARAMS: &'static str = "expansions=attachments.media_keys,author_id&media.fields=url,variants,preview_image_url&user.fields=name";
     static ref RE : regex::Regex= Regex::new("https://t.co/\\w+\\b").unwrap();
     pub static ref DATABASE_URL: String = env::var("DATABASE_URL").unwrap_or("".to_string());
+    static ref REDIS_URL: String = env::var("REDIS_URL").unwrap_or("".to_string());
 }
 
 pub fn twitt_id(link: &str) -> TwitterID {
@@ -204,8 +207,25 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
     )
 }
 
+const CONVERSATION_KEY: &str = "conversation";
+const EXPIRE_KEY_TTL: u16 = 20;
+
 async fn fetch_threads(conversation_id: u64, user_id: u64) -> usize {
-    // check cache if fetch threads before
+    let client = redis::Client::open(&**REDIS_URL);
+
+    if client.is_err() {
+        return 0
+    }
+
+    let mut con = client.unwrap().get_connection().unwrap();
+    let redis_key = format!("{}:{}", CONVERSATION_KEY, conversation_id);
+
+    let mut threads_count : usize = con.hlen(redis_key.clone()).unwrap();
+
+    if threads_count > 0 {
+        log::info!("threads exists in cache");
+        return threads_count;
+    }
 
     log::info!("fetch thread");
     
@@ -231,6 +251,7 @@ async fn fetch_threads(conversation_id: u64, user_id: u64) -> usize {
     }
 
     let result = response.unwrap();
+
     log::info!("Status {}", result.status().as_u16());
 
     let response_json = result.json::<ThreadSearchResult>().await.unwrap();
@@ -238,14 +259,36 @@ async fn fetch_threads(conversation_id: u64, user_id: u64) -> usize {
     let thread_ids = response_json.data
     .iter()
     .map(|x|x.id.parse::<u64>().unwrap())
-    .collect::<Vec<u64>>();
+    .collect::<Vec<u64>>()
+    .into_iter();
 
-    // save thread_ids to cache
-    return thread_ids.len();
+    threads_count = thread_ids.len();
+
+    let mut pipe = redis::pipe();
+
+    for (i, id) in thread_ids.enumerate() {
+        pipe.cmd("HSET").arg(redis_key.clone()).arg(i+1).arg(id);
+    }
+    pipe.cmd("EXPIRE").arg(redis_key.clone()).arg(EXPIRE_KEY_TTL);
+
+    let _ : () = pipe.query(&mut con).unwrap();
+
+    return threads_count;
 
 }
 
-pub async fn get_thread(converation_id: u64, thread_number: u8) -> Option<u64>{
-    // get possible tweet id related to given conversation id
-    Some(0)
+pub async fn get_thread(conversation_id: u64, thread_number: u8) -> Option<u64>{
+    let client = redis::Client::open(&**REDIS_URL);
+
+    if client.is_err() {
+        return None;
+    }
+
+    let mut con = client.unwrap().get_connection().unwrap();
+    let redis_key = format!("{}:{}", CONVERSATION_KEY, conversation_id);
+    let tid: String = con.hget(redis_key, thread_number).unwrap();
+    if !tid.is_empty() {
+        return Some(tid.parse::<u64>().unwrap());
+    }
+    return None;
 }

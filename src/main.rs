@@ -65,7 +65,7 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
             vec![
                 vec![
                     InlineKeyboardButton::callback(
-                        "next".to_string(),
+                        "Next thread".to_string(),
                         format!(
                             "{}_{}_{}_{}",
                             THREAD,
@@ -379,7 +379,7 @@ async fn callback_queries_handler(
                 ).await;
                 response_matching(response, &bot, &(q.message.unwrap().chat)).await?;   
             } else {
-                bot.send_message(q.from.id, "Theres isn't another thread 🤷‍♂️").await?;
+                bot.send_message(q.from.id, "Thread not found 🤷‍♂️").await?;
             }
             
         },
