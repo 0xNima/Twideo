@@ -8,7 +8,6 @@ use std::{env, error::Error};
 use teloxide::{
     prelude2::*, 
     types::{
-        Chat,
         ParseMode, 
         InputFile, 
         InputMedia, 
@@ -67,9 +66,10 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
                     InlineKeyboardButton::callback(
                         "Next thread".to_string(),
                         format!(
-                            "{}_{}_{}",
+                            "{}_{}_{}_{}",
                             THREAD,
                             twitter_data.conversation_id,
+                            twitter_data.user_id,
                             twitter_data.next
                         )
                     )
@@ -129,20 +129,45 @@ fn message_response_cb(twitter_data: &TWD) -> Response {
 
 fn inline_query_response_cb(twitter_data: &TWD) -> Response {
     let mut inline_result: Vec<InlineQueryResult> = Vec::new();
+    let mut keyboard: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+
+    if twitter_data.thread_count > 0 {
+        keyboard.push(vec![
+            InlineKeyboardButton::callback(
+                "Next thread".to_string(), 
+                format!("{}_{}_{}_{}", THREAD, twitter_data.conversation_id, twitter_data.user_id, twitter_data.next)
+            )
+        ]);
+    }
+
+    if twitter_data.twitter_media.len() > 1 {
+        keyboard.push(vec![
+            InlineKeyboardButton::callback(
+                "See album".to_string(),
+                format!("{}_{}", FULL_ALBUM, &twitter_data.id)
+            )   
+        ]);
+    }
 
     if twitter_data.twitter_media.is_empty() {
-        inline_result.push(InlineQueryResult::Article(
-            InlineQueryResultArticle::new(
-                generate_code(),
-                &twitter_data.name,
-                InputMessageContent::Text(
-                    InputMessageContentText::new(&twitter_data.caption)
-                        .parse_mode(ParseMode::Html)
-                        .disable_web_page_preview(true),
-                ),
-            )
-            .description(&twitter_data.caption),
-        ));
+        let mut article_result = InlineQueryResultArticle::new(
+            generate_code(),
+            &twitter_data.name,
+            InputMessageContent::Text(
+                InputMessageContentText::new(&twitter_data.caption)
+                    .parse_mode(ParseMode::Html)
+                    .disable_web_page_preview(true),
+            ),
+        )
+        .description(&twitter_data.caption);
+
+        if keyboard.len() > 0 {
+            article_result = article_result.reply_markup(InlineKeyboardMarkup::new(keyboard));
+        }
+
+        inline_result.push(InlineQueryResult::Article(article_result));
+
+        return Response::InlineResults(inline_result);
     }
 
     for media in &twitter_data.twitter_media {
@@ -156,52 +181,55 @@ fn inline_query_response_cb(twitter_data: &TWD) -> Response {
                 .title(&twitter_data.name)
                 .caption(&twitter_data.caption)
                 .parse_mode(ParseMode::Html);
-        
-                if twitter_data.twitter_media.len() > 1 {
-                    let keyboard: Vec<Vec<InlineKeyboardButton>> = vec![
-                        vec![
-                            InlineKeyboardButton::callback(
-                                "See Album".to_string(),
-                                format!("{}_{}", FULL_ALBUM, twitter_data.id)
-                            )
-                        ]
-                    ];
-        
+
+                if keyboard.len() > 0 {
                     inline_photo = inline_photo.reply_markup(
-                        InlineKeyboardMarkup::new(keyboard)
+                        InlineKeyboardMarkup::new(keyboard.clone())
                     );
                 }
-                
+
                 inline_result.push(InlineQueryResult::Photo(inline_photo));
             },
             "video" => {
                 for variant in &twitter_data.extra_urls {
-                    inline_result.push(InlineQueryResult::Video(
-                        InlineQueryResultVideo::new(
-                            generate_code(), 
-                            Url::parse(variant.url.as_str()).unwrap(),
-                            variant.content_type.parse().unwrap(),
-                            Url::parse(&media.thumb).unwrap(), 
-                            format!("{} (Bitrate {})", &twitter_data.name, variant.bit_rate.unwrap_or(0))
-                        )
-                        .caption(&twitter_data.caption)
-                        .parse_mode(ParseMode::Html)
-                    ));
+                    let mut inline_video = InlineQueryResultVideo::new(
+                        generate_code(), 
+                        Url::parse(variant.url.as_str()).unwrap(),
+                        variant.content_type.parse().unwrap(),
+                        Url::parse(&media.thumb).unwrap(), 
+                        format!("{} (Bitrate {})", &twitter_data.name, variant.bit_rate.unwrap_or(0))
+                    )
+                    .caption(&twitter_data.caption)
+                    .parse_mode(ParseMode::Html);
+
+                    if keyboard.len() > 0 {
+                        inline_video = inline_video.reply_markup(
+                            InlineKeyboardMarkup::new(keyboard.clone())
+                        );
+                    }
+    
+                    inline_result.push(InlineQueryResult::Video(inline_video));
                 }
             },
             "animated_gif" => {
                 for variant in &twitter_data.extra_urls {
-                    inline_result.push(InlineQueryResult::Gif(
-                        InlineQueryResultGif::new(
-                            generate_code(), 
-                            Url::parse(variant.url.as_str()).unwrap(),
-                            Url::parse(&media.thumb).unwrap(),
+                    let mut inline_gifs = InlineQueryResultGif::new(
+                        generate_code(), 
+                        Url::parse(variant.url.as_str()).unwrap(),
+                        Url::parse(&media.thumb).unwrap(),
+
+                    )
+                    .caption(&twitter_data.caption)
+                    .parse_mode(ParseMode::Html)
+                    .title(format!("{} (Bitrate {})", twitter_data.name, variant.bit_rate.unwrap_or(0)));
+
+                    if keyboard.len() > 0 {
+                        inline_gifs = inline_gifs.reply_markup(
+                            InlineKeyboardMarkup::new(keyboard.clone())
+                        );
+                    }
     
-                        )
-                        .caption(&twitter_data.caption)
-                        .parse_mode(ParseMode::Html)
-                        .title(format!("{} (Bitrate {})", twitter_data.name, variant.bit_rate.unwrap_or(0)))
-                    ));
+                    inline_result.push(InlineQueryResult::Gif(inline_gifs));
                 }
             },
             _ => {}
@@ -234,11 +262,11 @@ async fn convert_to_tl_by_id<F>(id: u64, next: u8, callback: F) -> Response wher
     return Response::None
 }
 
-async fn response_matching(r: Response, bot: &AutoSend<Bot> , chat: &Chat) 
+async fn response_matching(r: Response, bot: &AutoSend<Bot> , chat_id: i64) 
 -> Result<(), Box<dyn Error + Send + Sync>> {
     match r {
         Response::Text(response) => {
-            let msg = bot.send_message(chat.id, response.text)
+            let msg = bot.send_message(chat_id, response.text)
             .parse_mode(ParseMode::Html)
             .disable_web_page_preview(true);
 
@@ -253,14 +281,14 @@ async fn response_matching(r: Response, bot: &AutoSend<Bot> , chat: &Chat)
         },
         Response::Media(media_with_extra) => {
             let response = bot.send_media_group(
-                chat.id, 
+                chat_id, 
                 media_with_extra.media
             )
             .await;
 
             if response.is_ok() {
                 if let Some(keyboard) = media_with_extra.keyboard {
-                    bot.send_message(chat.id, "tap button to see next thread")
+                    bot.send_message(chat_id, "tap button to see next thread")
                     .parse_mode(ParseMode::Html)
                     .disable_web_page_preview(true)
                     .reply_markup(
@@ -270,14 +298,14 @@ async fn response_matching(r: Response, bot: &AutoSend<Bot> , chat: &Chat)
                 }
             } else if media_with_extra.allowed {
                 bot.send_message(
-                    chat.id,
+                    chat_id,
                     format!("Telegram is unable to download high quality video.\nI will send you other qualities.")
                 ).parse_mode(ParseMode::Html)
                 .disable_web_page_preview(true)
                 .await?;
 
                 for variant in &media_with_extra.extra_urls {
-                    bot.send_media_group(chat.id, [
+                    bot.send_media_group(chat_id, [
                         InputMedia::Video(
                             InputMediaVideo::new(
                                 InputFile::url(Url::parse(variant.url.as_str()).unwrap())
@@ -318,7 +346,7 @@ async fn message_handler(
         }
         else {
             let response = convert_to_tl(maybe_url, message_response_cb).await;
-            response_matching(response, &bot, chat).await?;
+            response_matching(response, &bot, chat.id).await?;
         }
     }
 
@@ -345,7 +373,7 @@ async fn callback_queries_handler(
     let query = q.data.unwrap();
     let query_parts = query.split('_').collect::<Vec<&str>>();
     
-    if query_parts.len() < 2 || query_parts.len() > 3 {
+    if query_parts.len() < 2 || query_parts.len() > 4 {
         // for backward compatibility. Maybe some old reply markups contain invalid data format
         return Ok(());
     }
@@ -356,19 +384,15 @@ async fn callback_queries_handler(
             // query template: <query-type>_<tweet-id>
             let tid = query_parts[1].parse::<u64>().unwrap();
             let response = convert_to_tl_by_id(tid, 1, message_response_cb).await;
-            match response {
-                Response::Media(media_with_extra) => {
-                    bot.send_media_group(q.from.id, media_with_extra.media).await?;
-                },
-                _ => ()
-            }
+            response_matching(response, &bot, q.from.id).await?;
         },
         THREAD => {
-            // query template: <query-type>_<conversation-id>_<thread-number>
+            // query template: <query-type>_<conversation-id>_<user-id>_<thread-number>
             let conversation_id = query_parts[1].parse::<u64>().unwrap();
-            let thread_number = query_parts[2].parse::<u8>().unwrap();
+            let user_id = query_parts[2].parse::<u64>().unwrap();
+            let thread_number = query_parts[3].parse::<u8>().unwrap();
 
-            let tid = get_thread(conversation_id, thread_number).await;
+            let tid = get_thread(conversation_id, thread_number, user_id).await;
 
             if let Some(tweet_id) = tid {
                 let response = convert_to_tl_by_id(
@@ -376,7 +400,7 @@ async fn callback_queries_handler(
                     thread_number + 1,
                     message_response_cb
                 ).await;
-                response_matching(response, &bot, &(q.message.unwrap().chat)).await?;   
+                response_matching(response, &bot, q.from.id).await?;   
             } else {
                 bot.send_message(q.from.id, "Thread not found 🤷‍♂️").await?;
             }
