@@ -5,23 +5,26 @@
  2. Create a new bot using [@Botfather](https://t.me/botfather) to get a token in the format `123456789:blablabla`.
  3. Get an [twitter access token](https://developer.twitter.com/en/apply-for-access).
  4. Optional Step: Install [PostgreSQL](https://www.postgresql.org/download/) database
- 5. initialize the `TWITTER_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN2`(to handle too many requests per second), `TELOXIDE_TOKEN` and `DATABASE_URL`(optional) environmental variables:
+ 5. Install [redis](https://redis.io/docs/getting-started/)(for caching threads)
+ 6. initialize the `TWITTER_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN2`(to handle too many requests per second), `TELOXIDE_TOKEN` and `DATABASE_URL`(optional) environmental variables:
 ```bash
 # Unix-like
 $ export TELOXIDE_TOKEN=<Your token here>
 $ export TWITTER_BEARER_TOKEN=<Your bearer token here>
 $ export TWITTER_BEARER_TOKEN2=<Your 2nd bearer token or just leave it blank>
 $ export DATABASE_URL=<Your database url or ignore it>
+$ export REDIS_URL=<Your redis url>
 
 # Windows
 $ set TELOXIDE_TOKEN=<Your token here>
 $ set TWITTER_BEARER_TOKEN=<Your bearer token here>
 $ set TWITTER_BEARER_TOKEN2=<Your 2nd bearer token or just leave it blank>
 $ set DATABASE_URL=<Your database url or ignore it>
+$ set REDIS_URL=<Your redis url>
 
 You can rename `.env-template` file to `.env` and put your environmental variables there.
 ```
-5. Run `cargo run` and enjoy the life :)
+7. Run `cargo run` and enjoy the life :)
 
 ## Getting Started
 Just copy the link of the tweet and send it to the bot, It will convert tweet to telegram message:
