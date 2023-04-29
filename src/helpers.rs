@@ -90,6 +90,16 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
 
     let client = reqwest::Client::new();
     
+    let cache = redis::Client::open(&**REDIS_URL);
+    let mut con = cache.unwrap().get_connection().unwrap();
+
+    let locked = con.get("is_locked").unwrap_or(false);
+
+    if locked {
+        log::warn!("Locked for a minute");
+        return Ok(None)
+    }
+
     let multimedia_response = client.get(
         format!(
             "{}/{}?tweet.fields=conversation_id&{}",
@@ -109,11 +119,14 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
     }
 
     if multimedia_response.status().as_u16() == 429 {
+        let mut pipe = redis::pipe();
+
+        pipe.cmd("SET").arg("is_locked").arg(true);
+        pipe.cmd("EXPIRE").arg("is_locked").arg(60);
+    
+        let _ : () = pipe.query(&mut con).unwrap();
         return Ok(None)
     }
-    
-
-
     
     let multimedia = multimedia_response.json::<MultimediaBody>().await?;
 

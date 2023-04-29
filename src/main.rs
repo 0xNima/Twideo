@@ -3,7 +3,6 @@ extern crate twitterVideodl;
 
 mod helpers;
 
-use diesel::query_builder::bind_collector;
 use dotenv::dotenv;
 use std::{env, error::Error};
 use teloxide::{
