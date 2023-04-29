@@ -1,7 +1,7 @@
 extern crate lazy_static;
 extern crate redis;
 
-use std::{env};
+use std::{env, error::Error, fmt};
 use regex::Regex;
 use rand::Rng;
 use rand::seq::SliceRandom;
@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
     static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?expansions=author_id&ids=";
 
     static ref TWITTER_BEARER_TOKENS: Vec<String> = vec![
-        env::var("TWITTER_BEARER_TOKEN").unwrap_or("".to_string()), 
+        // env::var("TWITTER_BEARER_TOKEN").unwrap_or("".to_string()), 
         env::var("TWITTER_BEARER_TOKEN2").unwrap_or("".to_string())
     ].into_iter().filter(|x| !x.is_empty()).collect::<Vec<String>>();
     
@@ -39,6 +39,18 @@ pub fn twitt_id(link: &str) -> TwitterID {
     }
     TwitterID::None
 }
+
+#[derive(Debug)]
+struct MyError(String);
+
+impl fmt::Display for MyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "There is an error: {}", self.0)
+    }
+}
+
+impl Error for MyError {}
+
 
 #[derive(Debug)]
 pub struct TwitterMedia {
@@ -91,6 +103,17 @@ pub async fn get_twitter_data(tid: u64) -> Result<Option<TWD>, Box<dyn std::erro
     .await?;
 
     log::info!("Status {}", multimedia_response.status().as_u16());
+
+    if multimedia_response.status().as_u16() == 401 {
+        return Err(Box::new(MyError("Unauthorized Error!".into())))
+    }
+
+    if multimedia_response.status().as_u16() == 429 {
+        return Ok(None)
+    }
+    
+
+
     
     let multimedia = multimedia_response.json::<MultimediaBody>().await?;
 

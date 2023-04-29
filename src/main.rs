@@ -3,6 +3,7 @@ extern crate twitterVideodl;
 
 mod helpers;
 
+use diesel::query_builder::bind_collector;
 use dotenv::dotenv;
 use std::{env, error::Error};
 use teloxide::{
@@ -46,6 +47,8 @@ enum Response {
     Media(MediaWithExtra),
     Text(TextResponse),
     InlineResults(Vec<InlineQueryResult>),
+    Unauthorized(i32),
+    TooManyRequest(i32),
     None
 }
 
@@ -242,10 +245,16 @@ async fn convert_to_tl<F>(url: &str, callback: F) -> Response where
     F: Fn(&TWD) -> Response {
         match twitt_id(url) {
             TwitterID::id(id) => {
-                let data = get_twitter_data(id).await.unwrap_or(None);
-                if let Some(twitter_data) = data {
-                    return callback(&twitter_data);
+                let data = get_twitter_data(id).await;
+
+                if data.is_ok() {
+                    if let Some(twitter_data) = data.unwrap() {
+                        return callback(&twitter_data);
+                    }
+    
+                    return Response::TooManyRequest(429);
                 }
+                return Response::Unauthorized(401);
             },
             _ => {}
         }
@@ -254,12 +263,18 @@ async fn convert_to_tl<F>(url: &str, callback: F) -> Response where
 
 async fn convert_to_tl_by_id<F>(id: u64, next: u8, callback: F) -> Response where
     F: Fn(&TWD) -> Response {
-    let data = get_twitter_data(id).await.unwrap_or(None);
-    if let Some(mut twitter_data) = data {
-        twitter_data.next = next;
-        return callback(&twitter_data);
+    let data = get_twitter_data(id).await;
+
+    if data.is_ok() {
+        if let Some(mut twitter_data) = data.unwrap() {
+            twitter_data.next = next;
+            return callback(&twitter_data);
+        }
+
+        return Response::TooManyRequest(429)
     }
-    return Response::None
+
+    return Response::Unauthorized(401)
 }
 
 async fn response_matching(r: Response, bot: &AutoSend<Bot> , chat_id: i64) 
@@ -318,6 +333,17 @@ async fn response_matching(r: Response, bot: &AutoSend<Bot> , chat_id: i64)
                 }
             }
         },
+        Response::TooManyRequest(code) => {
+            bot.send_message(chat_id, "🧑‍💻👨‍💻⚠️ Server is busy! Please try a little later.")
+            .disable_web_page_preview(true)
+            .await?;
+        },
+        Response::Unauthorized(code) => {
+            bot.send_message(chat_id, "☠️ Bot is stopped to work due to Twitter's new API plan(<a href='https://twitter.com/TwitterDev/status/1641222786894135296'>click to see announcement</a>). But don't despair. 👀 I'm looking for a way to come back. Be patient 💪🏻")
+            .parse_mode(ParseMode::Html)
+            .disable_web_page_preview(true)
+            .await?;
+        },
         _ => ()
     }
 
@@ -358,9 +384,48 @@ async fn inline_queries_handler(
     update: InlineQuery,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let response = convert_to_tl(&update.query, inline_query_response_cb).await;
-    if let Response::InlineResults(inline_result) = response {
-        let req_builder = bot.answer_inline_query(update.id, inline_result);
-        req_builder.await?;
+
+    match response {
+        Response::InlineResults(inline_result) => {
+            let req_builder = bot.answer_inline_query(update.id, inline_result);
+            req_builder.await?;
+        },
+        Response::Unauthorized(code) => {
+            bot.answer_inline_query(
+                update.id, 
+                [
+                    InlineQueryResult::Article(
+                        InlineQueryResultArticle::new(
+                            generate_code(),
+                            "Stop Working",
+                            InputMessageContent::Text(
+                                InputMessageContentText::new("☠️ Bot is stopped to work due to Twitter's new API plan(<a href='https://twitter.com/TwitterDev/status/1641222786894135296'>click to see announcement</a>). But don't despair. 👀 I'm looking for a way to come back. Be patient 💪🏻")
+                                    .parse_mode(ParseMode::Html)
+                                    .disable_web_page_preview(true),
+                            ),
+                        )
+                    )
+                ]
+            ).await?;
+        },
+        Response::TooManyRequest(code) => {
+            bot.answer_inline_query(
+                update.id, 
+                [
+                    InlineQueryResult::Article(
+                        InlineQueryResultArticle::new(
+                            generate_code(),
+                            "Busy",
+                            InputMessageContent::Text(
+                                InputMessageContentText::new("🧑‍💻👨‍💻⚠️ Server is busy! Please try a little later.")
+                                    .disable_web_page_preview(true),
+                            ),
+                        )
+                    )
+                ]
+            ).await?;
+        },
+        _ => ()
     }
 
     Ok(())
