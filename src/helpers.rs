@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
     static ref TWITTER_V2_URL: &'static str = "https://api.twitter.com/2/tweets?expansions=author_id&ids=";
 
     static ref TWITTER_BEARER_TOKENS: Vec<String> = vec![
-        // env::var("TWITTER_BEARER_TOKEN").unwrap_or("".to_string()), 
+        env::var("TWITTER_BEARER_TOKEN").unwrap_or("".to_string()), 
         env::var("TWITTER_BEARER_TOKEN2").unwrap_or("".to_string())
     ].into_iter().filter(|x| !x.is_empty()).collect::<Vec<String>>();
     
